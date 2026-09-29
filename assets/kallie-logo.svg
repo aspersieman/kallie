@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 144">
+  <rect x="12" y="12" width="120" height="120" rx="28" fill="#122B3A"/>
+  <rect x="39" y="40" width="66" height="68" rx="10" fill="#F5F8F6"/>
+  <path d="M39 50a10 10 0 0 1 10-10h46a10 10 0 0 1 10 10v12H39z" fill="#52D6B2"/>
+  <rect x="54" y="34" width="7" height="17" rx="3.5" fill="#F5F8F6"/>
+  <rect x="83" y="34" width="7" height="17" rx="3.5" fill="#F5F8F6"/>
+  <circle cx="56" cy="76" r="4" fill="#A9B8B8"/>
+  <circle cx="72" cy="76" r="4" fill="#A9B8B8"/>
+  <circle cx="88" cy="76" r="4" fill="#A9B8B8"/>
+  <circle cx="56" cy="92" r="4" fill="#A9B8B8"/>
+  <rect x="67" y="87" width="10" height="10" rx="3" fill="#52D6B2"/>
+  <circle cx="88" cy="92" r="4" fill="#A9B8B8"/>
+  <text x="158" y="78" fill="#122B3A" font-family="ui-sans-serif, system-ui, sans-serif" font-size="52" font-weight="700" letter-spacing="-2">kallie</text>
+  <text x="161" y="106" fill="#526873" font-family="ui-sans-serif, system-ui, sans-serif" font-size="15" letter-spacing="1.4">CALENDAR AT A GLANCE</text>
+</svg>
