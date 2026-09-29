@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="340" height="100" viewBox="0 0 340 100">
+  <rect x="6" y="7" width="86" height="86" rx="22" fill="#173C35"/>
+  <rect x="28" y="25" width="42" height="50" rx="8" fill="#F7F4EA"/>
+  <path d="M28 33a8 8 0 0 1 8-8h26a8 8 0 0 1 8 8v9H28z" fill="#EF8354"/>
+  <rect x="38" y="21" width="5" height="15" rx="2.5" fill="#F7F4EA"/>
+  <rect x="55" y="21" width="5" height="15" rx="2.5" fill="#F7F4EA"/>
+  <circle cx="40" cy="53" r="3.5" fill="#A8B9A2"/>
+  <circle cx="49" cy="53" r="3.5" fill="#E6B85C"/>
+  <circle cx="58" cy="53" r="3.5" fill="#A8B9A2"/>
+  <circle cx="40" cy="65" r="3.5" fill="#A8B9A2"/>
+  <circle cx="49" cy="65" r="3.5" fill="#A8B9A2"/>
+  <path d="m56 65 2 2 4-5" fill="none" stroke="#173C35" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2"/>
+  <text x="110" y="55" fill="#173C35" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="36" font-weight="700" letter-spacing="-1">kallie</text>
+  <text x="112" y="76" fill="#60756C" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="12" font-weight="500" letter-spacing="1.5">CALENDAR, CLEARLY</text>
+</svg>

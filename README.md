@@ -1,9 +1,15 @@
 # kallie
 
+![Kallie — Calendar, clearly](assets/kallie-logo.svg)
+
 A small command-line Google Calendar client. By default, Kallie retrieves
 today's events and prints them in a readable text format. Its event model and
 formatters are separate from the Google API client so other desktop integrations
 can reuse them.
+
+The square [PNG app icon](assets/kallie-icon.png) is ready to upload to OAuth
+consent-screen branding. Scalable [SVG icon](assets/kallie-icon.svg) and
+[wordmark](assets/kallie-logo.svg) versions are also included.
 
 ## Configure Google Calendar access
 
