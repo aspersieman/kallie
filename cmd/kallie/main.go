@@ -16,9 +16,10 @@ import (
 
 func main() {
 	if err := run(context.Background(), os.Args[1:], os.Stdout, os.Stderr); err != nil {
-		if !errors.Is(err, flag.ErrHelp) {
-			fmt.Fprintln(os.Stderr, err)
+		if errors.Is(err, flag.ErrHelp) {
+			return
 		}
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
@@ -33,6 +34,9 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	}
 	if flags.NArg() != 0 {
 		return fmt.Errorf("unexpected arguments: %v", flags.Args())
+	}
+	if _, err := calendar.Format(nil, *format); err != nil {
+		return err
 	}
 
 	configData, err := os.ReadFile(*configPath)

@@ -26,7 +26,7 @@ func TestEventsForDayRefreshesTokenAndReadsPages(t *testing.T) {
 			json.NewEncoder(w).Encode(tokenResponse{AccessToken: "access", ExpiresIn: 3600})
 		case strings.HasSuffix(r.URL.Path, "/events"):
 			eventCalls++
-			if r.Header.Get("Authorization") == "" {
+			if !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") {
 				t.Error("calendar request did not include the refreshed bearer token")
 			}
 			if got := r.URL.Query().Get("timeMin"); got != "2026-09-29T00:00:00-07:00" {
