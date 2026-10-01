@@ -78,6 +78,7 @@ func TestGetTokenFromWeb(t *testing.T) {
 		if r.URL.Path != "/token" {
 			t.Errorf("unexpected token path %q", r.URL.Path)
 		}
+		w.Header().Set("Content-Type", "application/json")
 		if err := r.ParseForm(); err != nil {
 			t.Fatal(err)
 		}
