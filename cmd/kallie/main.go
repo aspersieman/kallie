@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -27,7 +26,10 @@ func main() {
 func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	flags := flag.NewFlagSet("kallie", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	configPath := flags.String("config", defaultConfigPath(), "path to the JSON credentials/config file")
+	credentialsPath := flags.String("credentials", filepath.Join(defaultConfigDir(), "credentials.json"), "path to the downloaded Google OAuth credentials JSON file")
+	tokenPath := flags.String("token", filepath.Join(defaultConfigDir(), "token.json"), "path to the OAuth token cache file")
+	calendarID := flags.String("calendar", "primary", "Google Calendar ID")
+	timezone := flags.String("timezone", "", "timezone used to determine the day (defaults to the system timezone)")
 	format := flags.String("format", "text", "output format: text or json")
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -39,15 +41,12 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 
-	configData, err := os.ReadFile(*configPath)
-	if err != nil {
-		return fmt.Errorf("read config file: %w", err)
-	}
-	var config googlecalendar.Config
-	if err := json.Unmarshal(configData, &config); err != nil {
-		return fmt.Errorf("parse config file: %w", err)
-	}
-	client, err := googlecalendar.NewClient(config)
+	client, err := googlecalendar.NewClient(ctx, googlecalendar.Config{
+		CredentialsFile: *credentialsPath,
+		TokenFile:       *tokenPath,
+		CalendarID:      *calendarID,
+		Timezone:        *timezone,
+	})
 	if err != nil {
 		return err
 	}
@@ -63,13 +62,13 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	return err
 }
 
-func defaultConfigPath() string {
+func defaultConfigDir() string {
 	if configHome := os.Getenv("XDG_CONFIG_HOME"); configHome != "" {
-		return filepath.Join(configHome, "kallie", "config.json")
+		return filepath.Join(configHome, "kallie")
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return filepath.Join(".", "config.json")
+		return "."
 	}
-	return filepath.Join(home, ".config", "kallie", "config.json")
+	return filepath.Join(home, ".config", "kallie")
 }
