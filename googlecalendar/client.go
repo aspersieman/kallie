@@ -5,49 +5,48 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
-	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/aspersieman/kallie/calendar"
-)
-
-const (
-	defaultAPIURL   = "https://www.googleapis.com/calendar/v3"
-	defaultTokenURL = "https://oauth2.googleapis.com/token"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google"
+	googlecalendarapi "google.golang.org/api/calendar/v3"
+	"google.golang.org/api/option"
 )
 
 type Config struct {
-	ClientID     string `json:"client_id"`
-	ClientSecret string `json:"client_secret"`
-	RefreshToken string `json:"refresh_token"`
-	CalendarID   string `json:"calendar_id"`
-	Timezone     string `json:"timezone"`
+	CredentialsFile string
+	TokenFile       string
+	CalendarID      string
+	Timezone        string
 }
 
 type Client struct {
-	config      Config
-	httpClient  *http.Client
-	apiURL      string
-	tokenURL    string
-	location    *time.Location
-	tokenMu     sync.Mutex
-	accessToken string
-	tokenExpiry time.Time
+	service    *googlecalendarapi.Service
+	calendarID string
+	location   *time.Location
 }
 
-func NewClient(config Config) (*Client, error) {
-	config.ClientID = strings.TrimSpace(config.ClientID)
-	config.ClientSecret = strings.TrimSpace(config.ClientSecret)
-	config.RefreshToken = strings.TrimSpace(config.RefreshToken)
+func NewClient(ctx context.Context, config Config) (*Client, error) {
+	return newClient(ctx, config, os.Stdin, os.Stdout)
+}
+
+func newClient(ctx context.Context, config Config, input io.Reader, output io.Writer, options ...option.ClientOption) (*Client, error) {
+	config.CredentialsFile = strings.TrimSpace(config.CredentialsFile)
+	config.TokenFile = strings.TrimSpace(config.TokenFile)
 	config.CalendarID = strings.TrimSpace(config.CalendarID)
-	if config.ClientID == "" || config.ClientSecret == "" || config.RefreshToken == "" {
-		return nil, fmt.Errorf("client_id, client_secret, and refresh_token are required")
+	config.Timezone = strings.TrimSpace(config.Timezone)
+	if config.CredentialsFile == "" {
+		return nil, fmt.Errorf("credentials file path is required")
 	}
 	if config.CalendarID == "" {
 		config.CalendarID = "primary"
+	}
+	if config.TokenFile == "" {
+		config.TokenFile = filepath.Join(filepath.Dir(config.CredentialsFile), "token.json")
 	}
 
 	location := time.Local
@@ -59,13 +58,35 @@ func NewClient(config Config) (*Client, error) {
 		}
 	}
 
-	return &Client{
-		config:     config,
-		httpClient: &http.Client{Timeout: 30 * time.Second},
-		apiURL:     defaultAPIURL,
-		tokenURL:   defaultTokenURL,
-		location:   location,
-	}, nil
+	credentials, err := os.ReadFile(config.CredentialsFile)
+	if err != nil {
+		return nil, fmt.Errorf("read credentials file: %w", err)
+	}
+	oauthConfig, err := google.ConfigFromJSON(credentials, googlecalendarapi.CalendarReadonlyScope)
+	if err != nil {
+		return nil, fmt.Errorf("parse credentials file: %w", err)
+	}
+
+	token, err := tokenFromFile(config.TokenFile)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return nil, fmt.Errorf("read token file: %w", err)
+		}
+		token, err = getTokenFromWeb(ctx, oauthConfig, input, output)
+		if err != nil {
+			return nil, err
+		}
+		if err := saveToken(config.TokenFile, token); err != nil {
+			return nil, fmt.Errorf("save token file: %w", err)
+		}
+	}
+
+	httpClient := oauthConfig.Client(ctx, token)
+	service, err := googlecalendarapi.NewService(ctx, append(options, option.WithHTTPClient(httpClient))...)
+	if err != nil {
+		return nil, fmt.Errorf("create Google Calendar service: %w", err)
+	}
+	return &Client{service: service, calendarID: config.CalendarID, location: location}, nil
 }
 
 func (c *Client) EventsToday(ctx context.Context) ([]calendar.Event, error) {
@@ -80,46 +101,19 @@ func (c *Client) EventsForDay(ctx context.Context, day time.Time) ([]calendar.Ev
 	events := make([]calendar.Event, 0)
 	pageToken := ""
 	for {
-		query := url.Values{
-			"timeMin":      {start.Format(time.RFC3339)},
-			"timeMax":      {end.Format(time.RFC3339)},
-			"singleEvents": {"true"},
-			"orderBy":      {"startTime"},
-			"maxResults":   {"2500"},
-		}
+		call := c.service.Events.List(c.calendarID).
+			TimeMin(start.Format(time.RFC3339)).
+			TimeMax(end.Format(time.RFC3339)).
+			SingleEvents(true).
+			OrderBy("startTime").
+			MaxResults(2500).
+			Context(ctx)
 		if pageToken != "" {
-			query.Set("pageToken", pageToken)
+			call.PageToken(pageToken)
 		}
-
-		endpoint := fmt.Sprintf("%s/calendars/%s/events?%s",
-			strings.TrimRight(c.apiURL, "/"), url.PathEscape(c.config.CalendarID), query.Encode())
-		request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+		result, err := call.Do()
 		if err != nil {
-			return nil, fmt.Errorf("create calendar request: %w", err)
-		}
-		token, err := c.bearerToken(ctx)
-		if err != nil {
-			return nil, err
-		}
-		request.Header.Set("Authorization", "Bearer "+token)
-		request.Header.Set("Accept", "application/json")
-
-		response, err := c.httpClient.Do(request)
-		if err != nil {
-			return nil, fmt.Errorf("request calendar events: %w", err)
-		}
-		body, readErr := io.ReadAll(io.LimitReader(response.Body, 4<<20))
-		response.Body.Close()
-		if readErr != nil {
-			return nil, fmt.Errorf("read calendar response: %w", readErr)
-		}
-		if response.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("calendar API returned %s: %s", response.Status, strings.TrimSpace(string(body)))
-		}
-
-		var result eventList
-		if err := json.Unmarshal(body, &result); err != nil {
-			return nil, fmt.Errorf("decode calendar response: %w", err)
+			return nil, fmt.Errorf("list calendar events: %w", err)
 		}
 		for _, item := range result.Items {
 			event, err := convertEvent(item)
@@ -135,80 +129,68 @@ func (c *Client) EventsForDay(ctx context.Context, day time.Time) ([]calendar.Ev
 	}
 }
 
-func (c *Client) bearerToken(ctx context.Context) (string, error) {
-	c.tokenMu.Lock()
-	defer c.tokenMu.Unlock()
-	if c.accessToken != "" && time.Until(c.tokenExpiry) > time.Minute {
-		return c.accessToken, nil
+func getTokenFromWeb(ctx context.Context, config *oauth2.Config, input io.Reader, output io.Writer) (*oauth2.Token, error) {
+	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
+	if _, err := fmt.Fprintf(output, "Go to the following link in your browser then type the authorization code:\n%v\n", authURL); err != nil {
+		return nil, fmt.Errorf("print authorization URL: %w", err)
 	}
-
-	form := url.Values{
-		"client_id":     {c.config.ClientID},
-		"client_secret": {c.config.ClientSecret},
-		"refresh_token": {c.config.RefreshToken},
-		"grant_type":    {"refresh_token"},
+	var authCode string
+	if _, err := fmt.Fscan(input, &authCode); err != nil {
+		return nil, fmt.Errorf("read authorization code: %w", err)
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.tokenURL, strings.NewReader(form.Encode()))
+	token, err := config.Exchange(ctx, authCode)
 	if err != nil {
-		return "", fmt.Errorf("create token request: %w", err)
+		return nil, fmt.Errorf("exchange authorization code: %w", err)
 	}
-	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	response, err := c.httpClient.Do(request)
+	return token, nil
+}
+
+func tokenFromFile(path string) (*oauth2.Token, error) {
+	file, err := os.Open(path)
 	if err != nil {
-		return "", fmt.Errorf("request access token: %w", err)
+		return nil, err
 	}
-	defer response.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+	defer file.Close()
+
+	token := &oauth2.Token{}
+	if err := json.NewDecoder(file).Decode(token); err != nil {
+		return nil, err
+	}
+	return token, nil
+}
+
+func saveToken(path string, token *oauth2.Token) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
-		return "", fmt.Errorf("read token response: %w", err)
+		return err
 	}
-	if response.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("OAuth token endpoint returned %s: %s", response.Status, strings.TrimSpace(string(body)))
+	if err := file.Chmod(0o600); err != nil {
+		file.Close()
+		return err
 	}
-	var result tokenResponse
-	if err := json.Unmarshal(body, &result); err != nil {
-		return "", fmt.Errorf("decode token response: %w", err)
+	if err := json.NewEncoder(file).Encode(token); err != nil {
+		file.Close()
+		return err
 	}
-	if result.AccessToken == "" {
-		return "", fmt.Errorf("OAuth token response did not include an access token")
-	}
-	if result.ExpiresIn <= 0 {
-		result.ExpiresIn = 3600
-	}
-	c.accessToken = result.AccessToken
-	c.tokenExpiry = time.Now().Add(time.Duration(result.ExpiresIn) * time.Second)
-	return c.accessToken, nil
+	return file.Close()
 }
 
-type tokenResponse struct {
-	AccessToken string `json:"access_token"`
-	ExpiresIn   int64  `json:"expires_in"`
-}
-
-type eventList struct {
-	Items         []googleEvent `json:"items"`
-	NextPageToken string        `json:"nextPageToken"`
-}
-
-type googleEvent struct {
-	Summary     string    `json:"summary"`
-	Description string    `json:"description"`
-	Location    string    `json:"location"`
-	Start       eventTime `json:"start"`
-	End         eventTime `json:"end"`
-}
-
-type eventTime struct {
-	DateTime string `json:"dateTime"`
-	Date     string `json:"date"`
-}
-
-func convertEvent(event googleEvent) (calendar.Event, error) {
-	start, startAllDay, err := event.Start.value()
+func convertEvent(event *googlecalendarapi.Event) (calendar.Event, error) {
+	if event == nil || event.Start == nil || event.End == nil {
+		summary := ""
+		if event != nil {
+			summary = event.Summary
+		}
+		return calendar.Event{}, fmt.Errorf("calendar event %q is missing start or end", summary)
+	}
+	start, startAllDay, err := eventValue(event.Start)
 	if err != nil {
 		return calendar.Event{}, fmt.Errorf("calendar event %q has invalid start: %w", event.Summary, err)
 	}
-	end, endAllDay, err := event.End.value()
+	end, endAllDay, err := eventValue(event.End)
 	if err != nil {
 		return calendar.Event{}, fmt.Errorf("calendar event %q has invalid end: %w", event.Summary, err)
 	}
@@ -225,18 +207,18 @@ func convertEvent(event googleEvent) (calendar.Event, error) {
 	}, nil
 }
 
-func (eventTime eventTime) value() (string, bool, error) {
-	if eventTime.DateTime != "" {
-		if _, err := time.Parse(time.RFC3339, eventTime.DateTime); err != nil {
+func eventValue(value *googlecalendarapi.EventDateTime) (string, bool, error) {
+	if value.DateTime != "" {
+		if _, err := time.Parse(time.RFC3339, value.DateTime); err != nil {
 			return "", false, err
 		}
-		return eventTime.DateTime, false, nil
+		return value.DateTime, false, nil
 	}
-	if eventTime.Date != "" {
-		if _, err := time.Parse("2006-01-02", eventTime.Date); err != nil {
+	if value.Date != "" {
+		if _, err := time.Parse("2006-01-02", value.Date); err != nil {
 			return "", true, err
 		}
-		return eventTime.Date, true, nil
+		return value.Date, true, nil
 	}
 	return "", false, fmt.Errorf("missing date or dateTime")
 }

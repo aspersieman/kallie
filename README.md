@@ -12,41 +12,35 @@ icon for OAuth consent-screen branding.
 
 ## Configure Google Calendar access
 
-Kallie uses an OAuth refresh token and requests read-only calendar access. No
-third-party Go modules are required.
+Kallie follows Google's [Go quickstart](https://developers.google.com/workspace/calendar/api/quickstart/go)
+and requests read-only calendar access.
 
 1. In the [Google Cloud Console](https://console.cloud.google.com/), create a
-   project, enable the Google Calendar API, and create an OAuth client ID
-   (Desktop app).
-2. In the [OAuth 2.0 Playground](https://developers.google.com/oauthplayground),
-   open the settings, select **Use your own OAuth credentials**, and enter that
-   client's ID and secret.
-3. Authorize the scope
-   `https://www.googleapis.com/auth/calendar.readonly`, exchange the
-   authorization code, and copy the refresh token.
-4. Save a config file as `~/.config/kallie/config.json`:
+   project, enable the Google Calendar API, configure the OAuth consent screen,
+   and create an OAuth client ID for a **Desktop app**.
+2. Download the OAuth client JSON file from the client's page in **APIs &
+   Services → Credentials**. Save it as
+   `~/.config/kallie/credentials.json` (or pass another path with
+   `--credentials`). Kallie does not download this file; Google generates it
+   for your project and it contains your OAuth client secret.
+3. Run Kallie. On the first run it prints an authorization link. Open it,
+   authorize access, and enter the authorization code when prompted.
 
-   ```json
-   {
-     "client_id": "YOUR_CLIENT_ID",
-     "client_secret": "YOUR_CLIENT_SECRET",
-     "refresh_token": "YOUR_REFRESH_TOKEN",
-     "calendar_id": "primary",
-     "timezone": "America/Los_Angeles"
-   }
-   ```
+Kallie saves the resulting token at `~/.config/kallie/token.json` with
+owner-only permissions. Keep both JSON files private; do not commit them. Use
+`--token` to choose a different token-cache path, or set `XDG_CONFIG_HOME` to
+change the default config directory.
 
-   The `calendar_id` and `timezone` fields are optional. The calendar defaults
-   to `primary`; timezone defaults to the system's local timezone. Protect this
-   file because it contains credentials (for example, run `chmod 600` on it).
-   You can put it elsewhere and specify its path with `--config`, or use the
-   `XDG_CONFIG_HOME` environment variable.
+The calendar defaults to `primary`; override it with `--calendar`. The
+timezone defaults to the system's local timezone; override it with
+`--timezone` (for example, `America/Los_Angeles`).
 
 ## Run
 
 ```sh
 go run ./cmd/kallie
 go run ./cmd/kallie --format json
+go run ./cmd/kallie --credentials ./credentials.json --token ./token.json
 ```
 
 Supported formats are `text` and `json`. Text is intended for terminal use;
