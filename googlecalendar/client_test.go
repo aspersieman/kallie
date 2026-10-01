@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -74,7 +75,7 @@ func TestEventsForDayReadsPages(t *testing.T) {
 }
 
 func TestGetTokenFromWeb(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/token" {
 			t.Errorf("unexpected token path %q", r.URL.Path)
 		}
@@ -87,28 +88,85 @@ func TestGetTokenFromWeb(t *testing.T) {
 		}
 		fmt.Fprint(w, `{"access_token":"access","refresh_token":"refresh","token_type":"Bearer","expires_in":3600}`)
 	}))
-	defer server.Close()
+	defer tokenServer.Close()
 
+	authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "unexpected request", http.StatusInternalServerError)
+	}))
+	defer authServer.Close()
 	config := &oauth2.Config{
 		ClientID:     "client",
 		ClientSecret: "secret",
 		RedirectURL:  "http://localhost",
 		Endpoint: oauth2.Endpoint{
-			AuthURL:  server.URL + "/auth",
-			TokenURL: server.URL + "/token",
+			AuthURL:  authServer.URL + "/auth",
+			TokenURL: tokenServer.URL + "/token",
 		},
 	}
-	var output strings.Builder
-	token, err := getTokenFromWeb(context.Background(), config, strings.NewReader("authorization-code\n"), &output)
+	output := make(chan string, 1)
+	result := make(chan struct {
+		token *oauth2.Token
+		err   error
+	}, 1)
+	go func() {
+		token, err := getTokenFromWeb(context.Background(), config, channelWriter{output})
+		result <- struct {
+			token *oauth2.Token
+			err   error
+		}{token: token, err: err}
+	}()
+
+	authPrompt := <-output
+	lines := strings.Split(strings.TrimSpace(authPrompt), "\n")
+	authURL, err := url.Parse(lines[len(lines)-1])
 	if err != nil {
 		t.Fatal(err)
 	}
-	if token.AccessToken != "access" || token.RefreshToken != "refresh" {
-		t.Fatalf("token = %#v", token)
+	callbackURL, err := url.Parse(authURL.Query().Get("redirect_uri"))
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(output.String(), server.URL+"/auth") {
-		t.Fatalf("authorization URL not printed: %s", output.String())
+	callbackQuery := callbackURL.Query()
+	callbackQuery.Set("code", "authorization-code")
+	callbackQuery.Set("state", "incorrect")
+	callbackURL.RawQuery = callbackQuery.Encode()
+	response, err := http.Get(callbackURL.String())
+	if err != nil {
+		t.Fatal(err)
 	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("callback with incorrect state returned %d", response.StatusCode)
+	}
+	callbackQuery.Set("state", authURL.Query().Get("state"))
+	callbackURL.RawQuery = callbackQuery.Encode()
+	response, err = http.Get(callbackURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("callback returned %d, want 200", response.StatusCode)
+	}
+	got := <-result
+	if got.err != nil {
+		t.Fatal(got.err)
+	}
+	if got.token.AccessToken != "access" || got.token.RefreshToken != "refresh" {
+		t.Fatalf("token = %#v", got.token)
+	}
+	if !strings.Contains(authPrompt, authServer.URL+"/auth") {
+		t.Fatalf("authorization URL not printed: %s", authPrompt)
+	}
+}
+
+type channelWriter struct {
+	channel chan<- string
+}
+
+func (w channelWriter) Write(value []byte) (int, error) {
+	w.channel <- string(value)
+	return len(value), nil
 }
 
 func TestTokenFileIsSavedWithPrivatePermissions(t *testing.T) {
@@ -147,7 +205,7 @@ func TestNewClientUsesCachedToken(t *testing.T) {
 	client, err := newClient(context.Background(), Config{
 		CredentialsFile: credentialsPath,
 		TokenFile:       tokenPath,
-	}, strings.NewReader(""), &strings.Builder{})
+	}, &strings.Builder{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,13 +215,13 @@ func TestNewClientUsesCachedToken(t *testing.T) {
 }
 
 func TestNewClientRequiresCredentialsFileAndValidTimezone(t *testing.T) {
-	if _, err := newClient(context.Background(), Config{Timezone: "not/a-timezone"}, strings.NewReader(""), &strings.Builder{}); err == nil {
+	if _, err := newClient(context.Background(), Config{Timezone: "not/a-timezone"}, &strings.Builder{}); err == nil {
 		t.Fatal("NewClient() accepted missing credentials file path")
 	}
 	if _, err := newClient(context.Background(), Config{
 		CredentialsFile: "unused.json",
 		Timezone:        "not/a-timezone",
-	}, strings.NewReader(""), &strings.Builder{}); err == nil {
+	}, &strings.Builder{}); err == nil {
 		t.Fatal("NewClient() accepted an invalid timezone")
 	}
 }

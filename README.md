@@ -23,8 +23,8 @@ and requests read-only calendar access.
    `~/.config/kallie/credentials.json` (or pass another path with
    `--credentials`). Kallie does not download this file; Google generates it
    for your project and it contains your OAuth client secret.
-3. Run Kallie. On the first run it prints an authorization link. Open it,
-   authorize access, and enter the authorization code when prompted.
+3. Run Kallie. On the first run it prints an authorization link. Open it and
+   authorize access; Kallie receives the local browser callback automatically.
 
 Kallie saves the resulting token at `~/.config/kallie/token.json` with
 owner-only permissions. Keep both JSON files private; do not commit them. Use
