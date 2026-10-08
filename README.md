@@ -71,3 +71,14 @@ format = "{{ output.text }}"
 ```
 
 Run `kallie` once in a terminal first to complete OAuth authorization.
+
+## Desktop notifications
+
+`kallie --notify` runs continuously and, when a timed event is due to start
+within `--lead` (default `10m`), sends a `notify-send` notification with an icon,
+an **Open event** button (opens the event's Google Calendar page with `xdg-open`;
+requires a notification daemon that supports actions, e.g. mako or dunst) and a
+quiet sound played with `pw-play` or `paplay`. Use `--sound` to choose a sound
+file and `--icon` for an icon (default `~/.config/kallie/kallie-icon.png`, falling
+back to the `appointment-soon` theme icon). Start it from Hyprland with
+`exec-once = kallie --notify`.

@@ -8,9 +8,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/aspersieman/kallie/calendar"
 	"github.com/aspersieman/kallie/googlecalendar"
+	"github.com/aspersieman/kallie/notify"
 )
 
 func main() {
@@ -31,6 +33,10 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	calendarID := flags.String("calendar", "primary", "Google Calendar ID")
 	timezone := flags.String("timezone", "", "timezone used to determine the day (defaults to the system timezone)")
 	format := flags.String("format", "text", "output format: text or json")
+	watch := flags.Bool("notify", false, "run continuously and send desktop notifications (notify-send) for upcoming events")
+	lead := flags.Duration("lead", 10*time.Minute, "how long before an event starts to notify (with --notify)")
+	sound := flags.String("sound", "", "sound file to play with notifications (default: freedesktop 'message' sound if found)")
+	icon := flags.String("icon", filepath.Join(defaultConfigDir(), "kallie-icon.png"), "notification icon file (falls back to a theme icon if missing)")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -49,6 +55,11 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	})
 	if err != nil {
 		return err
+	}
+	if *watch {
+		return notify.Watch(ctx, client.EventsToday, notify.Config{
+			Lead: *lead, Icon: *icon, Sound: *sound, Log: stderr,
+		})
 	}
 	events, err := client.EventsToday(ctx)
 	if err != nil {

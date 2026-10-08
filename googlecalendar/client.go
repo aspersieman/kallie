@@ -269,6 +269,7 @@ func convertEvent(event *googlecalendarapi.Event) (calendar.Event, error) {
 		AllDay:      startAllDay,
 		Location:    event.Location,
 		Description: event.Description,
+		Link:        event.HtmlLink,
 	}, nil
 }
 
