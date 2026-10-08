@@ -37,6 +37,9 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	lead := flags.Duration("lead", 10*time.Minute, "how long before an event starts to notify (with --notify)")
 	sound := flags.String("sound", "", "sound file to play with notifications (default: freedesktop 'message' sound if found)")
 	icon := flags.String("icon", filepath.Join(defaultConfigDir(), "kallie-icon.png"), "notification icon file (falls back to a theme icon if missing)")
+	fromFlag := flags.String("from", "", "include events starting from this date (YYYY-MM-DD)")
+	toFlag := flags.String("to", "", "include events up to and including this date (YYYY-MM-DD)")
+	maxRange := flags.Int("max-range", googlecalendar.DefaultMaxRangeDays, "maximum number of days a --from/--to query may span")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -45,6 +48,26 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	}
 	if _, err := calendar.Format(nil, *format); err != nil {
 		return err
+	}
+
+	var from, to time.Time
+	var err error
+	if *fromFlag != "" {
+		if from, err = time.Parse("2006-01-02", *fromFlag); err != nil {
+			return fmt.Errorf("invalid --from date %q (want YYYY-MM-DD)", *fromFlag)
+		}
+	}
+	if *toFlag != "" {
+		if to, err = time.Parse("2006-01-02", *toFlag); err != nil {
+			return fmt.Errorf("invalid --to date %q (want YYYY-MM-DD)", *toFlag)
+		}
+	}
+	if *maxRange <= 0 {
+		return fmt.Errorf("--max-range must be positive")
+	}
+	ranged := !from.IsZero() || !to.IsZero()
+	if ranged && *watch {
+		return fmt.Errorf("--from/--to cannot be used with --notify")
 	}
 
 	client, err := googlecalendar.NewClient(ctx, googlecalendar.Config{
@@ -61,7 +84,12 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 			Lead: *lead, Icon: *icon, Sound: *sound, Log: stderr,
 		})
 	}
-	events, err := client.EventsToday(ctx)
+	var events []calendar.Event
+	if ranged {
+		events, err = client.EventsBetween(ctx, from, to, *maxRange)
+	} else {
+		events, err = client.EventsToday(ctx)
+	}
 	if err != nil {
 		return err
 	}
