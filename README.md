@@ -97,7 +97,8 @@ Click an event to open it in Google Calendar; press **Escape** to close. Wire it
 to a Wayle button, e.g. `on_click = "/path/to/kallie-gui"`.
 
 ```sh
-make gui   # or: go build -o bin/kallie-gui ./cmd/kallie-gui
+make build-gui   # bin/kallie-gui
+make install     # installs both kallie and kallie-gui (install-cli / install-gui for one)
 ```
 
 Note: Fyne renders with OpenGL, which on Linux and macOS requires cgo
