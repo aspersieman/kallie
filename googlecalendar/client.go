@@ -100,7 +100,50 @@ func (c *Client) EventsToday(ctx context.Context) ([]calendar.Event, error) {
 func (c *Client) EventsForDay(ctx context.Context, day time.Time) ([]calendar.Event, error) {
 	localDay := day.In(c.location)
 	start := time.Date(localDay.Year(), localDay.Month(), localDay.Day(), 0, 0, 0, 0, c.location)
-	end := start.AddDate(0, 0, 1)
+	return c.listEvents(ctx, start, start.AddDate(0, 0, 1))
+}
+
+// DefaultMaxRangeDays is the default maximum number of days a query may span.
+const DefaultMaxRangeDays = 90
+
+// EventsBetween returns events from the start of the from day through the end
+// of the to day (both inclusive, in the client's timezone). A zero from or to
+// means unbounded on that side, in which case the range is capped at
+// maxRangeDays from the given date. If both are given and span more than
+// maxRangeDays, an error is returned. A maxRangeDays <= 0 uses
+// DefaultMaxRangeDays.
+func (c *Client) EventsBetween(ctx context.Context, from, to time.Time, maxRangeDays int) ([]calendar.Event, error) {
+	if maxRangeDays <= 0 {
+		maxRangeDays = DefaultMaxRangeDays
+	}
+	day := func(t time.Time) time.Time {
+		// Use the date as given; only the timezone is applied.
+		return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, c.location)
+	}
+	var start, end time.Time
+	switch {
+	case from.IsZero() && to.IsZero():
+		return c.EventsToday(ctx)
+	case to.IsZero():
+		start = day(from)
+		end = start.AddDate(0, 0, maxRangeDays)
+	case from.IsZero():
+		end = day(to).AddDate(0, 0, 1)
+		start = end.AddDate(0, 0, -maxRangeDays)
+	default:
+		start = day(from)
+		end = day(to).AddDate(0, 0, 1)
+		if !end.After(start) {
+			return nil, fmt.Errorf("to date must not be before from date")
+		}
+		if end.After(start.AddDate(0, 0, maxRangeDays)) {
+			return nil, fmt.Errorf("date range exceeds the maximum of %d days", maxRangeDays)
+		}
+	}
+	return c.listEvents(ctx, start, end)
+}
+
+func (c *Client) listEvents(ctx context.Context, start, end time.Time) ([]calendar.Event, error) {
 
 	events := make([]calendar.Event, 0)
 	pageToken := ""

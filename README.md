@@ -43,6 +43,12 @@ go run ./cmd/kallie --format json
 go run ./cmd/kallie --credentials ./credentials.json --token ./token.json
 ```
 
+Use `--from YYYY-MM-DD` and/or `--to YYYY-MM-DD` to list events across dates
+(both inclusive). With only `--from`, events from that date onward are shown;
+with only `--to`, events up to that date. The range is capped by `--max-range`
+days (default 90): open-ended queries are truncated to it, and a `--from`/`--to`
+pair spanning more is rejected.
+
 Supported formats are `text`, `json` and `wayle`. Text is intended for terminal use;
 JSON exposes event start/end values, all-day status, location, and description
 for taskbar integrations. For example:
