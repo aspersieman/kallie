@@ -88,3 +88,20 @@ quiet sound played with `pw-play` or `paplay`. Use `--sound` to choose a sound
 file and `--icon` for an icon (default `~/.config/kallie/kallie-icon.png`, falling
 back to the `appointment-soon` theme icon). Start it from Hyprland with
 `exec-once = kallie --notify`.
+
+## Pop-up calendar window (Fyne)
+
+`kallie-gui` opens a small window listing today's events (`--days N` for more,
+plus the same `--credentials`, `--token`, `--calendar`, `--timezone` flags).
+Click an event to open it in Google Calendar; press **Escape** to close. Wire it
+to a Wayle button, e.g. `on_click = "/path/to/kallie-gui"`.
+
+```sh
+make gui   # or: go build -o bin/kallie-gui ./cmd/kallie-gui
+```
+
+Note: Fyne renders with OpenGL, which on Linux and macOS requires cgo
+(Wayland/X11 and GL development headers; on Arch: `pacman -S gcc libx11 libxcursor
+libxrandr libxinerama libxi mesa wayland libxkbcommon`). Only Windows builds
+without cgo. The `kallie` CLI itself remains a pure-Go static binary
+(`CGO_ENABLED=0`); the GUI is a separate binary and is excluded from `make release`.

@@ -9,13 +9,16 @@ LDFLAGS  := -s -w
 PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
 
 .DEFAULT_GOAL := help
-.PHONY: help build run test vet fmt lint tidy check clean release install uninstall
+.PHONY: gui help build run test vet fmt lint tidy check clean release install uninstall
 
 help: ## Show this help
 	@grep -E '^[a-z_-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-10s %s\n", $$1, $$2}'
 
 build: ## Build a development binary into bin/
 	go build -o $(BUILD_DIR)/$(BINARY) $(PKG)
+
+gui: ## Build the Fyne GUI (needs cgo + OpenGL/X11/Wayland dev headers on Linux)
+	CGO_ENABLED=1 go build -o $(BUILD_DIR)/kallie-gui ./cmd/kallie-gui
 
 run: ## Run kallie (pass args with ARGS="--json")
 	go run $(PKG) $(ARGS)
