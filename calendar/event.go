@@ -14,6 +14,7 @@ type Event struct {
 	AllDay      bool   `json:"all_day"`
 	Location    string `json:"location,omitempty"`
 	Description string `json:"description,omitempty"`
+	Link        string `json:"link,omitempty"`
 }
 
 func Format(events []Event, format string) ([]byte, error) {
