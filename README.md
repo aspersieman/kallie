@@ -43,7 +43,7 @@ go run ./cmd/kallie --format json
 go run ./cmd/kallie --credentials ./credentials.json --token ./token.json
 ```
 
-Supported formats are `text` and `json`. Text is intended for terminal use;
+Supported formats are `text`, `json` and `wayle`. Text is intended for terminal use;
 JSON exposes event start/end values, all-day status, location, and description
 for taskbar integrations. For example:
 
@@ -54,3 +54,20 @@ CGO_ENABLED=0 go build -o kallie ./cmd/kallie
 
 The backend can also be consumed directly from `github.com/aspersieman/kallie/calendar`
 and `github.com/aspersieman/kallie/googlecalendar`.
+
+## Wayle taskbar module
+
+`--format wayle` prints one JSON line: `{"text","tooltip","class"}` where `text`
+is the event count, `tooltip` is the text list and `class` is `has-events` or
+`empty`. Example Wayle config (check https://wayle.app/guide/custom-modules for
+the exact key names in your Wayle version):
+
+```toml
+[[modules.custom]]
+id = "kallie"
+command = "/path/to/kallie --format wayle"
+interval = 300000
+format = "{{ output.text }}"
+```
+
+Run `kallie` once in a terminal first to complete OAuth authorization.
