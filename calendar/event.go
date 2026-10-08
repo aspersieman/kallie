@@ -60,15 +60,16 @@ func formatTime(value string) string {
 
 // WayleOutput is the single-line JSON object consumed by taskbar custom modules.
 type WayleOutput struct {
+	Icon    string `json:"icon"`
 	Text    string `json:"text"`
 	Tooltip string `json:"tooltip"`
 	Class   string `json:"class"`
 }
 
 func formatWayle(events []Event) ([]byte, error) {
-	out := WayleOutput{Text: "󰃭 0", Class: "empty", Tooltip: strings.TrimSuffix(string(formatText(events)), "\n")}
+	out := WayleOutput{Icon: "󰃭", Text: "0", Class: "empty", Tooltip: strings.TrimSuffix(string(formatText(events)), "\n")}
 	if len(events) > 0 {
-		out.Text = fmt.Sprintf("󰃭 %d", len(events))
+		out.Text = fmt.Sprintf("%d", len(events))
 		out.Class = "has-events"
 	}
 	data, err := json.Marshal(out)
